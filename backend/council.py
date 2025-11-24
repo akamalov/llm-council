@@ -1,7 +1,7 @@
 """3-stage LLM Council orchestration."""
 
 from typing import List, Dict, Any, Tuple
-from .openrouter import query_models_parallel, query_model
+from .llm_client import query_models_parallel, query_model
 from .config import COUNCIL_MODELS, CHAIRMAN_MODEL
 
 
@@ -20,12 +20,12 @@ async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
     # Query all models in parallel
     responses = await query_models_parallel(COUNCIL_MODELS, messages)
 
-    # Format results
+    # Format results (responses keyed by display_name)
     stage1_results = []
-    for model, response in responses.items():
+    for display_name, response in responses.items():
         if response is not None:  # Only include successful responses
             stage1_results.append({
-                "model": model,
+                "model": display_name,
                 "response": response.get('content', '')
             })
 
@@ -159,17 +159,21 @@ Provide a clear, well-reasoned final answer that represents the council's collec
     messages = [{"role": "user", "content": chairman_prompt}]
 
     # Query the chairman model
-    response = await query_model(CHAIRMAN_MODEL, messages)
+    response = await query_model(
+        CHAIRMAN_MODEL['model'],
+        CHAIRMAN_MODEL['provider'],
+        messages
+    )
 
     if response is None:
         # Fallback if chairman fails
         return {
-            "model": CHAIRMAN_MODEL,
+            "model": CHAIRMAN_MODEL['display_name'],
             "response": "Error: Unable to generate final synthesis."
         }
 
     return {
-        "model": CHAIRMAN_MODEL,
+        "model": CHAIRMAN_MODEL['display_name'],
         "response": response.get('content', '')
     }
 
@@ -275,7 +279,7 @@ Title:"""
     messages = [{"role": "user", "content": title_prompt}]
 
     # Use gemini-2.5-flash for title generation (fast and cheap)
-    response = await query_model("google/gemini-2.5-flash", messages, timeout=30.0)
+    response = await query_model("gemini-2.5-flash", "google", messages, timeout=30.0)
 
     if response is None:
         # Fallback to a generic title

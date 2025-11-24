@@ -99,8 +99,8 @@ async def llm_council_deliberate(question: str) -> Dict[str, Any]:
         "final_answer": stage3_result.get("response", ""),
         "deliberation_id": deliberation_id,
         "summary": {
-            "council_models": COUNCIL_MODELS,
-            "chairman_model": CHAIRMAN_MODEL,
+            "council_models": [m['display_name'] for m in COUNCIL_MODELS],
+            "chairman_model": CHAIRMAN_MODEL['display_name'],
             "stages_completed": 3,
             "models_responded": len(stage1_results),
             "cache_ttl_minutes": _CACHE_TTL_MINUTES

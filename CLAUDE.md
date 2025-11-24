@@ -11,16 +11,26 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 ### Backend Structure (`backend/`)
 
 **`config.py`**
-- Contains `COUNCIL_MODELS` (list of OpenRouter model identifiers)
+- Contains `COUNCIL_MODELS` (list of model configurations with provider info)
 - Contains `CHAIRMAN_MODEL` (model that synthesizes final answer)
-- Uses environment variable `OPENROUTER_API_KEY` from `.env`
+- Uses environment variables for API keys:
+  - `OPENAI_API_KEY`: Direct OpenAI access
+  - `ANTHROPIC_API_KEY`: Direct Anthropic access
+  - `GOOGLE_API_KEY`: Direct Google Gemini access
+  - `OPENROUTER_API_KEY`: OpenRouter fallback/alternative
 - Backend runs on **port 8001** (NOT 8000 - user had another app on 8000)
 
-**`openrouter.py`**
-- `query_model()`: Single async model query
+**`llm_client.py`** (NEW - replaces direct OpenRouter usage)
+- `LLMClient`: Unified client supporting multiple providers
+- `query_model()`: Single async model query to any provider
 - `query_models_parallel()`: Parallel queries using `asyncio.gather()`
-- Returns dict with 'content' and optional 'reasoning_details'
-- Graceful degradation: returns None on failure, continues with successful responses
+- Returns dict with 'content' and optional metadata
+- **Automatic fallback**: If direct API key not available, falls back to OpenRouter
+- Supported providers: `openai`, `anthropic`, `google`, `openrouter`
+
+**`openrouter.py`** (LEGACY - kept for backward compatibility)
+- Now mostly replaced by `llm_client.py`
+- Still used as fallback when direct API keys unavailable
 
 **`council.py`** - The Core Logic
 - `stage1_collect_responses()`: Parallel queries to all council models
@@ -123,7 +133,50 @@ All backend modules use relative imports (e.g., `from .config import ...`) not a
 All ReactMarkdown components must be wrapped in `<div className="markdown-content">` for proper spacing. This class is defined globally in `index.css`.
 
 ### Model Configuration
-Models are hardcoded in `backend/config.py`. Chairman can be same or different from council members. The current default is Gemini as chairman per user preference.
+Models are configured in `backend/config.py` with explicit provider fields. Each model specifies:
+- `model`: Provider-specific model identifier (e.g., "gpt-5.1", "claude-sonnet-4.5-20250929")
+- `provider`: Which API to use ("openai", "anthropic", "google", "openrouter")
+- `display_name`: User-facing name shown in UI (e.g., "openai/gpt-5.1")
+
+Chairman can be same or different from council members. The current default is Gemini as chairman per user preference.
+
+## Provider System
+
+### Direct API Integration
+The system now supports direct API calls to OpenAI, Anthropic, and Google, bypassing OpenRouter for lower latency and better rate limits.
+
+**Provider-Specific Adaptations:**
+
+**OpenAI** (`openai`)
+- Endpoint: `/v1/chat/completions`
+- Uses standard message format
+- Supports reasoning_details
+
+**Anthropic** (`anthropic`)
+- Endpoint: `/v1/messages`
+- System messages extracted to separate `system` parameter
+- Max tokens required (default: 4096)
+- Response in `content[0].text`
+
+**Google Gemini** (`google`)
+- Endpoint: `/v1beta/models/{model}:generateContent`
+- Messages converted to `contents` with `parts` structure
+- Role mapping: `assistant` → `model`
+- System instruction in separate parameter
+- API key in query string
+
+**OpenRouter** (`openrouter`)
+- Used as fallback when direct API keys unavailable
+- Unified format for all models
+- Single billing across providers
+
+### Automatic Fallback Logic
+If a direct provider API key is not configured:
+1. System prints: "PROVIDER_API_KEY not found, falling back to OpenRouter"
+2. Queries via OpenRouter using format: `provider/model`
+3. Continues gracefully without user intervention
+
+This allows gradual migration from OpenRouter to direct APIs without breaking existing setups.
 
 ## Common Gotchas
 
@@ -131,6 +184,8 @@ Models are hardcoded in `backend/config.py`. Chairman can be same or different f
 2. **CORS Issues**: Frontend must match allowed origins in `main.py` CORS middleware
 3. **Ranking Parse Failures**: If models don't follow format, fallback regex extracts any "Response X" patterns in order
 4. **Missing Metadata**: Metadata is ephemeral (not persisted), only available in API responses
+5. **Provider API Keys**: If direct API keys missing, system falls back to OpenRouter silently. Check logs for "falling back to OpenRouter" messages.
+6. **Model Identifiers**: Use native format ("gpt-5.1") not OpenRouter format ("openai/gpt-5.1") in model field. OpenRouter format only for `display_name`.
 
 ## Future Enhancement Ideas
 

@@ -32,30 +32,71 @@ npm install
 cd ..
 ```
 
-### 2. Configure API Key
+### 2. Configure API Keys
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root. You have two options:
 
+**Option A: Direct Provider APIs (Recommended)**
+```bash
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GOOGLE_API_KEY=...
+OPENROUTER_API_KEY=sk-or-v1-...  # Optional fallback for models without direct keys
+```
+
+**Option B: OpenRouter Only**
 ```bash
 OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
-Get your API key at [openrouter.ai](https://openrouter.ai/). Make sure to purchase the credits you need, or sign up for automatic top up.
+Get your API keys:
+- OpenAI: [platform.openai.com](https://platform.openai.com/)
+- Anthropic: [console.anthropic.com](https://console.anthropic.com/)
+- Google: [ai.google.dev](https://ai.google.dev/)
+- OpenRouter: [openrouter.ai](https://openrouter.ai/) (fallback for models without direct API keys)
+
+**Benefits of Direct APIs:**
+- Lower latency (direct connection)
+- Better rate limits
+- Native model access
+- Automatic fallback to OpenRouter if keys not provided
 
 ### 3. Configure Models (Optional)
 
-Edit `backend/config.py` to customize the council:
+Edit `backend/config.py` to customize the council. Each model specifies its provider:
 
 ```python
 COUNCIL_MODELS = [
-    "openai/gpt-5.1",
-    "google/gemini-3-pro-preview",
-    "anthropic/claude-sonnet-4.5",
-    "x-ai/grok-4",
+    {
+        "model": "gpt-5.1",
+        "provider": "openai",  # Uses OPENAI_API_KEY, falls back to OpenRouter
+        "display_name": "openai/gpt-5.1"
+    },
+    {
+        "model": "gemini-3-pro-preview",
+        "provider": "google",  # Uses GOOGLE_API_KEY, falls back to OpenRouter
+        "display_name": "google/gemini-3-pro-preview"
+    },
+    {
+        "model": "claude-sonnet-4.5-20250929",
+        "provider": "anthropic",  # Uses ANTHROPIC_API_KEY, falls back to OpenRouter
+        "display_name": "anthropic/claude-sonnet-4.5"
+    },
+    {
+        "model": "x-ai/grok-4",
+        "provider": "openrouter",  # Always uses OpenRouter
+        "display_name": "x-ai/grok-4"
+    },
 ]
 
-CHAIRMAN_MODEL = "google/gemini-3-pro-preview"
+CHAIRMAN_MODEL = {
+    "model": "gemini-3-pro-preview",
+    "provider": "google",
+    "display_name": "google/gemini-3-pro-preview"
+}
 ```
+
+**Provider Options:** `openai`, `anthropic`, `google`, `openrouter`
 
 ## Running the Application
 
