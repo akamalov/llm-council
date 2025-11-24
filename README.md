@@ -85,3 +85,20 @@ Then open http://localhost:5173 in your browser.
 - **Frontend:** React + Vite, react-markdown for rendering
 - **Storage:** JSON files in `data/conversations/`
 - **Package Management:** uv for Python, npm for JavaScript
+
+## MCP Integration
+
+LLM Council is available as an **MCP (Model Context Protocol) server** for Claude Code and other MCP clients. This allows you to invoke the council directly from within your AI assistant:
+
+```
+User: "Use llm-council to decide: Should I use microservices or monolith?"
+Claude: [Invokes council via MCP, returns synthesized decision]
+```
+
+**Quick Setup:** See `MCP.md` for full documentation.
+
+**Two MCP Tools:**
+- `llm_council_deliberate(question)` - Complete 3-stage deliberation
+- `llm_council_inspect(deliberation_id)` - Detailed stage breakdown
+
+This enables AI assistants to leverage multi-model consensus for complex architectural decisions, code reviews, and technical trade-offs.

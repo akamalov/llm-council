@@ -141,6 +141,52 @@ Models are hardcoded in `backend/config.py`. Chairman can be same or different f
 - Custom ranking criteria (not just accuracy/insight)
 - Support for reasoning models (o1, etc.) with special handling
 
+## MCP Integration
+
+LLM Council is available as an MCP (Model Context Protocol) server for use in Claude Code and other MCP-compatible clients.
+
+**Documentation:**
+- `MCP.md` - User guide (setup, usage, troubleshooting)
+- `MCP_IMPLEMENTATION_GUIDE.md` - Developer guide (architecture, extending, testing)
+
+**Quick Setup:**
+
+Add to `.claude/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "llm-council": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "backend.mcp_server"],
+      "cwd": "/absolute/path/to/llm-council"
+    }
+  }
+}
+```
+
+**Two Tools Exposed:**
+
+1. **`llm_council_deliberate(question)`** - Run complete 3-stage deliberation, returns final answer + deliberation_id
+2. **`llm_council_inspect(deliberation_id)`** - Retrieve detailed breakdown of all stages
+
+**Usage Pattern:**
+```
+User: "Use llm-council to decide: Should I refactor this module?"
+→ Claude calls llm_council_deliberate
+→ Returns chairman's synthesis + deliberation_id
+
+User: "Show me what each model said"
+→ Claude calls llm_council_inspect
+→ Returns all stage1/stage2/stage3 details
+```
+
+**Technical Notes:**
+- Deliberations cached in memory for 60 minutes
+- Stateless design (no conversation IDs)
+- Uses hardcoded models from `config.py`
+- Returns structured JSON with all stage data
+- Runs via stdio transport
+
 ## Testing Notes
 
 Use `test_openrouter.py` to verify API connectivity and test different model identifiers before adding to council. The script tests both streaming and non-streaming modes.
