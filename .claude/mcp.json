@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "llm-council": {
+      "command": "uv",
+      "args": [
+        "run",
+        "python",
+        "-m",
+        "backend.mcp_server"
+      ],
+      "cwd": "/Users/akamalov/projects/llm-council",
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}"
+      }
+    }
+  }
+}
