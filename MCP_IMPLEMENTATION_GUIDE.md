@@ -109,11 +109,11 @@ def _cleanup_expired_cache():
 - **Thread-safe**: Python GIL protects dict operations for single-process server
 
 **Trade-offs:**
-- ✅ Simple implementation
-- ✅ Fast access
-- ❌ Lost on server restart
-- ❌ Not suitable for multi-process deployment
-- ❌ Memory grows with concurrent deliberations
+- [PASS] Simple implementation
+- [PASS] Fast access
+- [FAIL] Lost on server restart
+- [FAIL] Not suitable for multi-process deployment
+- [FAIL] Memory grows with concurrent deliberations
 
 **Alternative Approaches:**
 - Redis: For multi-process/distributed deployments
@@ -524,11 +524,11 @@ def _store_deliberation(...):
 ```
 
 **Trade-offs:**
-- ✅ Survives restarts
-- ✅ Queryable history
-- ❌ Disk I/O overhead
-- ❌ Schema migrations needed
-- ❌ More complex cleanup logic
+- [PASS] Survives restarts
+- [PASS] Queryable history
+- [FAIL] Disk I/O overhead
+- [FAIL] Schema migrations needed
+- [FAIL] More complex cleanup logic
 
 ## Testing
 
@@ -607,7 +607,7 @@ async def load_test():
 ### 1. API Key Protection
 
 ```python
-# ✅ GOOD: Environment variables
+# [CORRECT] Environment variables
 from .config import (
     OPENAI_API_KEY,
     ANTHROPIC_API_KEY,
@@ -615,7 +615,7 @@ from .config import (
     OPENROUTER_API_KEY
 )  # All loaded from .env
 
-# ❌ BAD: Hardcoded
+# [WRONG] Hardcoded
 OPENAI_API_KEY = "sk-..."
 ```
 
@@ -893,7 +893,7 @@ async def llm_council_deliberate(question: str) -> Dict[str, Any]:
 ### 1. Blocking I/O in Async Functions
 
 ```python
-# ❌ BAD: Blocks event loop
+# [WRONG] Blocks event loop
 def blocking_operation():
     time.sleep(5)
 
@@ -903,7 +903,7 @@ async def llm_council_deliberate(question: str):
 ```
 
 ```python
-# ✅ GOOD: Use async operations
+# [CORRECT] Use async operations
 @mcp.tool()
 async def llm_council_deliberate(question: str):
     await asyncio.sleep(5)  # Non-blocking
@@ -912,10 +912,10 @@ async def llm_council_deliberate(question: str):
 ### 2. Unbounded Cache Growth
 
 ```python
-# ❌ BAD: Never cleaned
+# [WRONG] Never cleaned
 _deliberation_cache[uuid] = data
 
-# ✅ GOOD: TTL-based cleanup
+# [CORRECT] TTL-based cleanup
 _cleanup_expired_cache()
 _deliberation_cache[uuid] = {"timestamp": datetime.now(), "data": data}
 ```
@@ -923,11 +923,11 @@ _deliberation_cache[uuid] = {"timestamp": datetime.now(), "data": data}
 ### 3. Exposing Internal Errors
 
 ```python
-# ❌ BAD: Leaks stack traces
+# [WRONG] Leaks stack traces
 except Exception as e:
     return {"error": str(e)}  # May contain sensitive paths
 
-# ✅ GOOD: Generic error messages
+# [CORRECT] Generic error messages
 except Exception as e:
     logger.error(f"Internal error: {e}", exc_info=True)
     return {"error": "Internal server error"}
@@ -941,7 +941,7 @@ except Exception as e:
 # In openrouter.py
 import httpx
 
-# ✅ Reuse client across requests
+# [CORRECT] Reuse client across requests
 _http_client = httpx.AsyncClient(timeout=60.0)
 
 async def query_model(model: str, messages: list):
