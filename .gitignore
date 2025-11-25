@@ -1,21 +1,118 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+# Flutter/Dart
+*.dart_tool/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+*.iml
+*.ipr
+*.iws
+.idea/
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
 
-# Virtual environments
-.venv
+# Android
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.*
+**/android/key.properties
+*.jks
+*.keystore
 
-# Keys and secrets
-.env
+# iOS/macOS
+**/ios/Flutter/.last_build_id
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/profile
+**/ios/build/
+**/macos/Flutter/ephemeral
+**/macos/Pods/
+**/macos/.symlinks/
+**/macos/build/
 
-# Data files
-data/
+# Dart Code Generation
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.config.dart
+*.mocks.dart
 
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+# Coverage
+coverage/
+*.lcov
+
+# Python Backend
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.coverage
+backend/htmlcov/
+backend/*.egg-info/
+backend/dist/
+backend/build/
+backend/venv/
+backend/.venv/
+backend/env/
+backend/.env
+*.env
+!backend/.env.example
+
+# Google Cloud
+service_account.json
+**/service_account.json
+*.json.enc
+credentials.json
+
+# IDE
+.vscode/
+*.code-workspace
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local development
+local.properties
+*.local
+.env.local
+.env.*.local
+
+# Claude Flow
+.claude-flow/
+.swarm/
+.claude/tdd-guard/
+.metadata

@@ -40,7 +40,7 @@ Create a `.env` file in the project root. You have two options:
 ```bash
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=...
+GEMINI_API_KEY=...
 OPENROUTER_API_KEY=sk-or-v1-...  # Optional fallback for models without direct keys
 ```
 
@@ -52,7 +52,7 @@ OPENROUTER_API_KEY=sk-or-v1-...
 Get your API keys:
 - OpenAI: [platform.openai.com](https://platform.openai.com/)
 - Anthropic: [console.anthropic.com](https://console.anthropic.com/)
-- Google: [ai.google.dev](https://ai.google.dev/)
+- Google Gemini: [ai.google.dev](https://ai.google.dev/)
 - OpenRouter: [openrouter.ai](https://openrouter.ai/) (fallback for models without direct API keys)
 
 **Benefits of Direct APIs:**
@@ -74,7 +74,7 @@ COUNCIL_MODELS = [
     },
     {
         "model": "gemini-3-pro-preview",
-        "provider": "google",  # Uses GOOGLE_API_KEY, falls back to OpenRouter
+        "provider": "google",  # Uses GEMINI_API_KEY, falls back to OpenRouter
         "display_name": "google/gemini-3-pro-preview"
     },
     {
@@ -141,5 +141,7 @@ Claude: [Invokes council via MCP, returns synthesized decision]
 **Two MCP Tools:**
 - `llm_council_deliberate(question)` - Complete 3-stage deliberation
 - `llm_council_inspect(deliberation_id)` - Detailed stage breakdown
+
+**Location Independent:** Works from any directory - you can use llm-council from any project without being in the llm-council directory.
 
 This enables AI assistants to leverage multi-model consensus for complex architectural decisions, code reviews, and technical trade-offs.

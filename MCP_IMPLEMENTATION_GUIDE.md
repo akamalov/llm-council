@@ -47,17 +47,23 @@ This guide explains the technical implementation of the LLM Council MCP server f
                   │
                   ▼
 ┌─────────────────────────────────────────────────┐
-│  backend/openrouter.py (API Client)             │
+│  backend/llm_client.py (Unified API Client)     │
+│  - LLMClient class with provider adapters       │
 │  - query_model() - Single async query           │
 │  - query_models_parallel() - Parallel queries   │
+│  - Automatic fallback to OpenRouter             │
 │  - Error handling with graceful degradation     │
 └─────────────────┬───────────────────────────────┘
                   │
                   ▼
 ┌─────────────────────────────────────────────────┐
-│  OpenRouter API                                 │
-│  - Routes to: GPT-5.1, Gemini-3-Pro,            │
-│    Claude-Sonnet-4.5, Grok-4                    │
+│  Direct Provider APIs + OpenRouter Fallback     │
+│  ┌────────────┬────────────┬────────────┬─────┐ │
+│  │  OpenAI    │ Anthropic  │  Google    │ OR  │ │
+│  │  API       │  API       │  Gemini    │     │ │
+│  └────────────┴────────────┴────────────┴─────┘ │
+│  - GPT-5.1, Gemini-3-Pro, Claude-Sonnet-4.5    │
+│  - Grok-4 (via OpenRouter)                      │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -218,7 +224,90 @@ async def llm_council_inspect(deliberation_id: str) -> Dict[str, Any]:
    - Users understand time constraints
    - Enables proactive re-deliberation if needed
 
-### 3. Reusing Existing Council Logic
+### 3. Provider System Implementation
+
+The unified `llm_client.py` abstracts provider differences while maintaining a consistent interface.
+
+**LLMClient Architecture:**
+
+```python
+class LLMClient:
+    def __init__(self):
+        # Load API keys from environment
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+
+    async def query_model(self, model, provider, messages, timeout):
+        # Route to appropriate provider
+        if provider == "openai":
+            return await self._query_openai(...)
+        elif provider == "anthropic":
+            return await self._query_anthropic(...)
+        # ... etc
+```
+
+**Provider-Specific Adapters:**
+
+**OpenAI** - Standard chat format:
+```python
+payload = {
+    "model": model,
+    "messages": messages  # Direct pass-through
+}
+```
+
+**Anthropic** - System message extraction:
+```python
+# Extract system messages to separate parameter
+system_content = None
+anthropic_messages = []
+
+for msg in messages:
+    if msg['role'] == 'system':
+        system_content = msg['content']
+    else:
+        anthropic_messages.append(msg)
+
+payload = {
+    "model": model,
+    "messages": anthropic_messages,
+    "max_tokens": 4096,
+    "system": system_content  # Separate field
+}
+```
+
+**Google Gemini** - Contents/parts format:
+```python
+# Convert to Gemini format
+contents = []
+for msg in messages:
+    role = 'model' if msg['role'] == 'assistant' else 'user'
+    contents.append({
+        'role': role,
+        'parts': [{'text': msg['content']}]
+    })
+
+payload = {"contents": contents}
+```
+
+**Fallback Logic:**
+```python
+async def _query_openai(self, model, messages, timeout):
+    if not self.openai_api_key:
+        print("OPENAI_API_KEY not found, falling back to OpenRouter")
+        return await self._query_openrouter(f"openai/{model}", messages, timeout)
+    # ... proceed with direct API
+```
+
+**Benefits:**
+- **Single Interface**: `query_model(model, provider, messages)`
+- **Format Translation**: Automatic message format conversion
+- **Graceful Degradation**: Missing keys → OpenRouter fallback
+- **Provider Agnostic**: Council logic doesn't care about providers
+
+### 4. Reusing Existing Council Logic
 
 ```python
 from .council import run_full_council
@@ -233,11 +322,11 @@ from .council import run_full_council
 **Adapter Pattern:**
 ```
 Web App (FastAPI) ─┐
-                   ├──> council.py (Core Logic) ──> OpenRouter API
+                   ├──> council.py (Core Logic) ──> llm_client.py ──> Providers
 MCP Server ────────┘
 ```
 
-### 4. Running the Server
+### 5. Running the Server
 
 ```python
 if __name__ == "__main__":
@@ -257,7 +346,87 @@ if __name__ == "__main__":
 - Concurrent deliberations handled by asyncio
 - No explicit multiprocessing (relies on OpenRouter concurrency)
 
+**Important Note on stdio Transport:**
+MCP servers use stdio (standard input/output) for communication. The server waits for JSON-RPC messages on stdin and writes responses to stdout. When running in Docker, stdin must remain open using the `-i` flag, otherwise the container exits immediately when stdin closes.
+
 ## Extending the Implementation
+
+### Adding a New Provider
+
+To add support for a new provider (e.g., xAI Grok, Cohere, Mistral):
+
+**Step 1: Add API Key to Config**
+```python
+# backend/config.py
+XAI_API_KEY = os.getenv("XAI_API_KEY")
+```
+
+**Step 2: Implement Provider Adapter**
+```python
+# backend/llm_client.py
+async def _query_xai(
+    self,
+    model: str,
+    messages: List[Dict[str, str]],
+    timeout: float
+) -> Optional[Dict[str, Any]]:
+    """Query xAI API (OpenAI-compatible)."""
+    if not self.xai_api_key:
+        print("XAI_API_KEY not found, falling back to OpenRouter")
+        return await self._query_openrouter(f"x-ai/{model}", messages, timeout)
+
+    headers = {
+        "Authorization": f"Bearer {self.xai_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": model,
+        "messages": messages,
+    }
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers=headers,
+            json=payload
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        message = data['choices'][0]['message']
+
+        return {
+            'content': message.get('content'),
+        }
+```
+
+**Step 3: Route in Main Query Method**
+```python
+async def query_model(self, model, provider, messages, timeout):
+    if provider == "xai":
+        return await self._query_xai(model, messages, timeout)
+    # ... existing providers
+```
+
+**Step 4: Update Config**
+```python
+# backend/config.py
+COUNCIL_MODELS = [
+    # ... existing models
+    {
+        "model": "grok-4",
+        "provider": "xai",
+        "display_name": "x-ai/grok-4"
+    },
+]
+```
+
+**Considerations:**
+- **API Compatibility**: OpenAI-compatible APIs easiest to integrate
+- **Message Format**: May need custom conversion (see Anthropic/Google examples)
+- **Error Handling**: Provider-specific error codes and messages
+- **Rate Limits**: Implement provider-specific backoff strategies
 
 ### Adding a Third Tool
 
@@ -438,11 +607,16 @@ async def load_test():
 ### 1. API Key Protection
 
 ```python
-# ✅ GOOD: Environment variable
-from .config import OPENROUTER_API_KEY  # Loaded from .env
+# ✅ GOOD: Environment variables
+from .config import (
+    OPENAI_API_KEY,
+    ANTHROPIC_API_KEY,
+    GEMINI_API_KEY,
+    OPENROUTER_API_KEY
+)  # All loaded from .env
 
 # ❌ BAD: Hardcoded
-OPENROUTER_API_KEY = "sk-or-v1-..."
+OPENAI_API_KEY = "sk-..."
 ```
 
 **MCP Client Configuration:**
@@ -451,11 +625,47 @@ OPENROUTER_API_KEY = "sk-or-v1-..."
   "mcpServers": {
     "llm-council": {
       "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
         "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}"
       }
     }
   }
 }
+```
+
+**Provider-Specific Security:**
+
+**OpenAI**
+- Rotate keys regularly via dashboard
+- Monitor usage at platform.openai.com
+- Set spending limits
+
+**Anthropic**
+- Keys prefixed with `sk-ant-`
+- Organization-level access control
+- Audit logs available
+
+**Google**
+- API key restrictions (HTTP referrers, IPs)
+- Quota limits per project
+- Cloud console monitoring
+
+**Key Rotation Strategy:**
+```python
+# Support multiple keys with priority
+OPENAI_API_KEYS = [
+    os.getenv("OPENAI_API_KEY_PRIMARY"),
+    os.getenv("OPENAI_API_KEY_SECONDARY"),
+]
+
+# Try primary, fallback to secondary if rate limited
+for key in OPENAI_API_KEYS:
+    try:
+        return await query_with_key(key)
+    except RateLimitError:
+        continue
 ```
 
 ### 2. Input Validation
@@ -541,6 +751,9 @@ uv run python -m backend.mcp_server
 
 ### Docker Deployment
 
+**Image:** `akamalov/llm-council:1.0`
+
+**Dockerfile:**
 ```dockerfile
 FROM python:3.10-slim
 
@@ -553,7 +766,54 @@ RUN uv sync
 CMD ["uv", "run", "python", "-m", "backend.mcp_server"]
 ```
 
-**Note**: stdio transport requires direct process communication; Docker mainly useful for packaging dependencies.
+**Important**: MCP servers use stdio transport and require stdin to remain open. Without the `-i` flag, the container exits immediately when stdin closes.
+
+**Running the Container:**
+
+```bash
+# Detached mode (background)
+docker run -d -i --name llm-council akamalov/llm-council:1.0
+
+# With environment variables from host
+docker run -d -i \
+  -e OPENAI_API_KEY \
+  -e ANTHROPIC_API_KEY \
+  -e GEMINI_API_KEY \
+  -e OPENROUTER_API_KEY \
+  --name llm-council \
+  akamalov/llm-council:1.0
+
+# With port mapping (if using HTTP variant)
+docker run -d -i -p 8000:8000 --name llm-council akamalov/llm-council:1.0
+```
+
+**MCP Client Configuration for Docker:**
+
+```json
+{
+  "mcpServers": {
+    "llm-council": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "OPENAI_API_KEY=${OPENAI_API_KEY}",
+        "-e", "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}",
+        "-e", "GEMINI_API_KEY=${GEMINI_API_KEY}",
+        "-e", "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}",
+        "akamalov/llm-council:1.0"
+      ]
+    }
+  }
+}
+```
+
+**Key Considerations:**
+- The `-i` flag keeps stdin open for stdio communication
+- Use `--rm` flag for automatic cleanup after each session
+- Environment variables passed via `-e` flags
+- No need for volume mounts (stateless cache)
 
 ### Multi-User Server
 
@@ -561,16 +821,31 @@ For shared deployment, consider HTTP transport:
 
 ```python
 from mcp.server.fastmcp import FastMCP
-from starlette.applications import Starlette
+import uvicorn
 
-app = Starlette()
-mcp_app = FastMCP("LLM Council")
+mcp = FastMCP("LLM Council")
 
-# Mount MCP to HTTP endpoint
-app.mount("/mcp", mcp_app.get_asgi_app())
+if __name__ == "__main__":
+    # Run as HTTP server instead of stdio
+    uvicorn.run(mcp.get_asgi_app(), host="0.0.0.0", port=8000)
 ```
 
-Then deploy via Uvicorn/Gunicorn on a server.
+Then deploy via Docker:
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+COPY . .
+
+RUN pip install uv
+RUN uv sync
+
+EXPOSE 8000
+CMD [". /app/.venv/bin/activate && python -m backend.mcp_server"]
+```
+
+**Note**: HTTP transport requires client support and different configuration than stdio transport.
 
 ## Monitoring & Debugging
 
@@ -713,16 +988,25 @@ async def llm_council_deliberate_stream(question: str):
 ## Conclusion
 
 The LLM Council MCP implementation demonstrates:
-- **Simplicity**: ~150 lines for full MCP integration
-- **Reusability**: Leverages existing council.py logic
+- **Simplicity**: ~150 lines for MCP integration + ~250 lines for provider abstraction
+- **Flexibility**: Multi-provider support with automatic fallback
+- **Reusability**: Leverages existing council.py logic across web and MCP interfaces
 - **Scalability**: Async operations support concurrent deliberations
-- **Maintainability**: Clear separation of concerns
+- **Maintainability**: Clear separation of concerns with provider adapters
 
 **Key Takeaways:**
 1. FastMCP abstracts MCP protocol complexity
-2. Ephemeral cache suits 60-min TTL use case
-3. Decorator-based tools keep code clean
-4. Async/await enables parallel model queries
-5. Structured errors improve debugging
+2. Provider abstraction enables direct API access with OpenRouter fallback
+3. Format translation handles provider-specific message structures
+4. Ephemeral cache suits 60-min TTL use case
+5. Decorator-based tools keep code clean
+6. Async/await enables parallel model queries across multiple providers
+7. Structured errors improve debugging
+
+**Provider System Benefits:**
+- Lower latency via direct API connections
+- Better rate limits per provider
+- Cost optimization through provider selection
+- Graceful degradation maintains reliability
 
 For questions or contributions, see main README.md and CLAUDE.md.

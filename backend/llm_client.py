@@ -2,10 +2,14 @@
 
 import httpx
 import os
+import logging
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -21,7 +25,7 @@ class LLMClient:
         """Initialize API keys from environment variables."""
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.google_api_key = os.getenv("GOOGLE_API_KEY")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 
         # API endpoints
@@ -59,10 +63,10 @@ class LLMClient:
             elif provider == "openrouter":
                 return await self._query_openrouter(model, messages, timeout)
             else:
-                print(f"Unknown provider: {provider}")
+                logger.error(f"Unknown provider: {provider}")
                 return None
         except Exception as e:
-            print(f"Error querying {provider}/{model}: {e}")
+            logger.error(f"Error querying {provider}/{model}: {e}", exc_info=True)
             return None
 
     async def _query_openai(
@@ -73,8 +77,10 @@ class LLMClient:
     ) -> Optional[Dict[str, Any]]:
         """Query OpenAI API."""
         if not self.openai_api_key:
-            print("OPENAI_API_KEY not found, falling back to OpenRouter")
+            logger.warning(f"OPENAI_API_KEY not found, falling back to OpenRouter for {model}")
             return await self._query_openrouter(f"openai/{model}", messages, timeout)
+
+        logger.info(f"Querying OpenAI directly: {model}")
 
         headers = {
             "Authorization": f"Bearer {self.openai_api_key}",
@@ -106,8 +112,10 @@ class LLMClient:
     ) -> Optional[Dict[str, Any]]:
         """Query Anthropic API."""
         if not self.anthropic_api_key:
-            print("ANTHROPIC_API_KEY not found, falling back to OpenRouter")
+            logger.warning(f"ANTHROPIC_API_KEY not found, falling back to OpenRouter for {model}")
             return await self._query_openrouter(f"anthropic/{model}", messages, timeout)
+
+        logger.info(f"Querying Anthropic directly: {model}")
 
         headers = {
             "x-api-key": self.anthropic_api_key,
@@ -156,11 +164,13 @@ class LLMClient:
         timeout: float
     ) -> Optional[Dict[str, Any]]:
         """Query Google Gemini API."""
-        if not self.google_api_key:
-            print("GOOGLE_API_KEY not found, falling back to OpenRouter")
+        if not self.gemini_api_key:
+            logger.warning(f"GEMINI_API_KEY not found, falling back to OpenRouter for {model}")
             return await self._query_openrouter(f"google/{model}", messages, timeout)
 
-        url = self.google_url.format(model=model) + f"?key={self.google_api_key}"
+        logger.info(f"Querying Google Gemini directly: {model}")
+
+        url = self.google_url.format(model=model) + f"?key={self.gemini_api_key}"
 
         # Convert messages to Gemini format
         # Gemini uses 'contents' with 'parts' instead of OpenAI's message format
@@ -213,8 +223,10 @@ class LLMClient:
     ) -> Optional[Dict[str, Any]]:
         """Query OpenRouter API (fallback)."""
         if not self.openrouter_api_key:
-            print("OPENROUTER_API_KEY not found, cannot query model")
+            logger.error(f"OPENROUTER_API_KEY not found, cannot query {model}")
             return None
+
+        logger.info(f"Querying via OpenRouter: {model}")
 
         headers = {
             "Authorization": f"Bearer {self.openrouter_api_key}",
