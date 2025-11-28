@@ -112,7 +112,10 @@ local.properties
 .env.*.local
 
 # Claude Flow
+.claude/
 .claude-flow/
 .swarm/
 .claude/tdd-guard/
 .metadata
+.serena/
+mcp_server.log
